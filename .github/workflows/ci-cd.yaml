@@ -1,0 +1,39 @@
+name: Build and deploy eyego-app to aws eks
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Login to AWS ECR
+      run: aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 501957928859.dkr.ecr.us-east-1.amazonaws.com
+
+    - name: Build and push Docker image
+      run: |
+        IMAGE_URI=501957928859.dkr.ecr.us-east-1.amazonaws.com/eyego-app:latest
+        docker build -t $IMAGE_URI ./eyego-app
+        docker push $IMAGE_URI
+
+    - name: Update kubeconfig
+      run: aws eks update-kubeconfig --region us-east-1 --name eyego-cluster
+
+    - name: Deploy to EKS
+      run: |
+        kubectl apply -f k8s/eyego-deployment.yaml
+        kubectl apply -f k8s/eyego-service.yaml
+        echo "to access the eyego-app use this external ip:"
+        kubectl get svc eyego-service
